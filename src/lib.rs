@@ -1,6 +1,6 @@
 use config::Config;
 use lazy_static::lazy_static;
-use log::{Level, Log, LevelFilter};
+use log::{Level, LevelFilter, Log};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 use rocket::{
     fairing::{Fairing, Info, Kind},
@@ -12,8 +12,8 @@ use rocket::{
 };
 use std::{
     path::Path,
-    rc::Rc,
-    sync::{Arc, Mutex}, thread,
+    sync::{Arc, Mutex},
+    thread,
 };
 
 #[derive(Debug, Clone)]
@@ -173,7 +173,7 @@ impl log::Log for LogServer {
             let message = record.args().to_string();
 
             if module.contains("rocket") || module.contains("reqwest") {
-                return
+                return;
             }
 
             let item = LogItem {
