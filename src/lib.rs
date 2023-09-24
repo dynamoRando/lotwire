@@ -62,7 +62,7 @@ impl Settings {
     }
 
     /// Optionally configure Settings with manual values instead of from a `lotwire.toml` file.
-    /// 
+    ///
     /// Values are:
     /// - address: The address to serve messages from
     /// - port: the HTTP port
@@ -83,9 +83,9 @@ lazy_static! {
 }
 
 /// A struct for capturing log messages in memory available over an HTTP endpoint.
-/// 
+///
 /// Log items are kept in memory in a ring buffer of fixed size. When the buffer size is exceeded, older messages are purged.
-/// 
+///
 /// Logs can be retrieved via a GET request from the `/logs` endpoint.
 #[derive(Debug, Clone, Default)]
 pub struct LogServer {
@@ -109,7 +109,7 @@ impl LogServer {
     }
 
     /// Configures the server with the specified settings.
-    /// 
+    ///
     /// NOTE: You _must_ call `init_logger` to register the server
     /// with your logging facade; otherwise no logs will be captured.
     pub fn with_settings(settings: Settings) -> LogServer {
@@ -146,7 +146,7 @@ impl LogServer {
     }
 
     /// Starts the LogServer's HTTP server.
-    /// 
+    ///
     /// Note: The underlying implementation is based on the `Rocket` crate.
     pub fn start_server(&self) {
         // println!("Starting server");
@@ -196,6 +196,9 @@ impl log::Log for LogServer {
             let module = record.target().to_string();
             let message = record.args().to_string();
 
+            // ignore log messages from our underlying `Rocket` HTTP server
+            // or from incoming `reqwest` items.
+            // TODO: This should be a configurable key/value pair vec.
             if module.contains("rocket") || module.contains("reqwest") {
                 return;
             }
