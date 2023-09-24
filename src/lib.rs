@@ -1,7 +1,8 @@
-use std::path::Path;
+use std::{path::Path, rc::Rc, sync::{Arc, Mutex}};
 
 use config::Config;
 use log::{Level, Log};
+use queues::{CircularBuffer, IsQueue};
 
 
 #[derive(Debug, Clone)]
@@ -50,14 +51,25 @@ impl Settings{
 }
 
 pub struct LogServer {
-    settings: Settings
+    settings: Settings,
+    buffer: Arc<Mutex<CircularBuffer<LogItem>>>
+}
+
+#[derive(Debug, Clone)]
+pub struct LogItem {
+    pub level: String,
+    pub module: String,
+    pub message: String,
 }
 
 impl LogServer {
     pub fn new(dir: &str, filename: &str) -> LogServer {
         let settings = Settings::new(dir, filename);
+        let buffer = CircularBuffer::new(settings.num_records as usize);
+        let buffer = Mutex::new(buffer);
         Self {
-            settings
+            settings,
+            buffer: buffer.into(),
         }
     }
 }
@@ -69,7 +81,17 @@ impl log::Log for LogServer {
 
     fn log(&self, record: &log::Record) {
         if self.enabled(record.metadata()) {
-            todo!()
+            let level = record.level().to_string();
+            let module = record.target().to_string();
+            let message = record.args().to_string();
+
+            let item = LogItem {
+                level,
+                module,
+                message,
+            };
+
+            self.buffer.lock().unwrap().add(item).unwrap();
         }
     }
 
