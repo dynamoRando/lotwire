@@ -16,6 +16,7 @@ use std::{
     thread,
 };
 
+/// Represents settings for the LogServer. See the `new` or `with_values` function for more information.
 #[derive(Debug, Clone)]
 pub struct Settings {
     address: String,
@@ -25,6 +26,7 @@ pub struct Settings {
 }
 
 impl Settings {
+    /// Creates new settings from the specified `lotwire.toml` file.
     pub fn new(dir: &str, filename: &str) -> Self {
         let location = Path::new(dir).join(filename.clone());
         let location = location.to_str().unwrap();
@@ -59,6 +61,13 @@ impl Settings {
         }
     }
 
+    /// Optionally configure Settings with manual values instead of from a `lotwire.toml` file.
+    /// 
+    /// Values are:
+    /// - address: The address to serve messages from
+    /// - port: the HTTP port
+    /// - level: the minimum log level you wish to capture
+    /// - num_records: the max record size of the buffer
     pub fn with_values(address: &str, port: u32, level: Level, num_records: u32) -> Self {
         Self {
             address: address.to_string(),
@@ -73,12 +82,18 @@ lazy_static! {
     static ref SERVER: Mutex<LogServer> = Mutex::new(LogServer::default());
 }
 
+/// A struct for capturing log messages in memory available over an HTTP endpoint.
+/// 
+/// Log items are kept in memory in a ring buffer of fixed size. When the buffer size is exceeded, older messages are purged.
+/// 
+/// Logs can be retrieved via a GET request from the `/logs` endpoint.
 #[derive(Debug, Clone, Default)]
 pub struct LogServer {
     settings: Option<Settings>,
     buffer: Option<Arc<Mutex<AllocRingBuffer<LogItem>>>>,
 }
 
+/// Represents a log messgae.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LogItem {
     pub level: String,
@@ -87,11 +102,16 @@ pub struct LogItem {
 }
 
 impl LogServer {
+    /// Configures the server with the specified `lotwire.toml` file.
     pub fn new(dir: &str, filename: &str) -> LogServer {
         let settings = Settings::new(dir, filename);
         Self::init(settings)
     }
 
+    /// Configures the server with the specified settings.
+    /// 
+    /// NOTE: You _must_ call `init_logger` to register the server
+    /// with your logging facade; otherwise no logs will be captured.
     pub fn with_settings(settings: Settings) -> LogServer {
         Self::init(settings)
     }
@@ -109,6 +129,7 @@ impl LogServer {
         server
     }
 
+    /// Registers the server with your logging facade to start recording.
     pub fn init_logger(&self) {
         let settings = self.settings.as_ref().unwrap().clone();
 
@@ -124,6 +145,9 @@ impl LogServer {
         log::set_boxed_logger(Box::new(self.clone())).unwrap();
     }
 
+    /// Starts the LogServer's HTTP server.
+    /// 
+    /// Note: The underlying implementation is based on the `Rocket` crate.
     pub fn start_server(&self) {
         // println!("Starting server");
         thread::spawn(move || {
