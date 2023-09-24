@@ -2,5 +2,5 @@
 
 Logs over the wire.
 
-Captures logs and keeps them in an in-memory ring buffer and makes them available over HTTP.
+Captures logs and keeps them in an in-memory ring buffer and makes them available over HTTP. See the single test for an example.
 
