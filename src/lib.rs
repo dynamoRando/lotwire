@@ -1,16 +1,23 @@
 use config::Config;
 use lazy_static::lazy_static;
 use log::{Level, Log};
-use rocket::{get, fairing::{Fairing, Info, Kind}, http::{Header, Status}, Request, Response, routes, State, serde::json::Json};
+use ringbuffer::{AllocRingBuffer, RingBuffer};
+use rocket::{
+    fairing::{Fairing, Info, Kind},
+    get,
+    http::{Header, Status},
+    routes,
+    serde::json::Json,
+    Request, Response, State,
+};
 use std::{
     path::Path,
     rc::Rc,
     sync::{Arc, Mutex},
 };
-use ringbuffer::{AllocRingBuffer, RingBuffer};
 
 #[derive(Debug, Clone)]
-struct Settings {
+pub struct Settings {
     address: String,
     port: u32,
     level: Level,
@@ -51,6 +58,15 @@ impl Settings {
             num_records,
         }
     }
+
+    pub fn with_values(address: &str, port: u32, level: Level, num_records: u32) -> Self {
+        Self {
+            address: address.to_string(),
+            port,
+            level,
+            num_records,
+        }
+    }
 }
 
 lazy_static! {
@@ -73,6 +89,14 @@ pub struct LogItem {
 impl LogServer {
     pub fn new(dir: &str, filename: &str) -> LogServer {
         let settings = Settings::new(dir, filename);
+        Self::init(settings)
+    }
+
+    pub fn with_settings(settings: Settings) -> LogServer {
+        Self::init(settings)
+    }
+
+    fn init(settings: Settings) -> LogServer {
         let buffer = AllocRingBuffer::new(settings.num_records as usize);
         let buffer = Mutex::new(buffer);
 
@@ -85,9 +109,12 @@ impl LogServer {
         server
     }
 
+    pub async fn start_server(&self) {
+        LogServer::start().unwrap();
+    }
+
     #[rocket::main]
     async fn start() -> Result<(), rocket::Error> {
-        
         let server = (*SERVER.lock().unwrap()).clone();
 
         let settings = server.settings.as_ref().unwrap().clone();
@@ -99,21 +126,14 @@ impl LogServer {
             cli_colors: false,
             ..rocket::config::Config::debug_default()
         };
-    
-      
+
         let _ = rocket::custom(config)
             .attach(CORS)
-            .mount(
-                "/",
-                routes![
-                    index,
-                    logs
-                ],
-            )
+            .mount("/", routes![index, logs])
             .manage(server)
             .launch()
             .await?;
-    
+
         Ok(())
     }
 }
@@ -135,7 +155,13 @@ impl log::Log for LogServer {
                 message,
             };
 
-            self.buffer.as_ref().unwrap().as_ref().lock().unwrap().push(item);
+            self.buffer
+                .as_ref()
+                .unwrap()
+                .as_ref()
+                .lock()
+                .unwrap()
+                .push(item);
         }
     }
 
@@ -148,20 +174,18 @@ fn index() -> &'static str {
 }
 
 #[get("/logs")]
-fn logs(server: &State<LogServer>) ->(Status, Json<Vec<LogItem>>) {
+fn logs(server: &State<LogServer>) -> (Status, Json<Vec<LogItem>>) {
     let buffer = server.buffer.as_ref().unwrap().clone();
     let buffer = buffer.lock().unwrap();
 
     let mut log_items: Vec<LogItem> = Vec::new();
-    
+
     for item in buffer.iter() {
         log_items.push(item.clone());
     }
-    
+
     (Status::Ok, Json(log_items))
 }
-
-
 
 pub struct CORS;
 
@@ -174,8 +198,7 @@ impl Fairing for CORS {
         }
     }
 
-    async fn on_response<'r>(&self, _request: &'r Request<'_>, 
-    response: &mut Response<'r>) {
+    async fn on_response<'r>(&self, _request: &'r Request<'_>, response: &mut Response<'r>) {
         response.set_header(Header::new("Access-Control-Allow-Origin", "*"));
         response.set_header(Header::new(
             "Access-Control-Allow-Methods",

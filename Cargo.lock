@@ -652,6 +652,7 @@ dependencies = [
  "ringbuffer",
  "rocket",
  "serde",
+ "tokio",
 ]
 
 [[package]]
