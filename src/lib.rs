@@ -1,6 +1,6 @@
 use config::Config;
 use lazy_static::lazy_static;
-use log::{Level, Log};
+use log::{Level, Log, LevelFilter};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 use rocket::{
     fairing::{Fairing, Info, Kind},
@@ -13,7 +13,7 @@ use rocket::{
 use std::{
     path::Path,
     rc::Rc,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex}, thread,
 };
 
 #[derive(Debug, Clone)]
@@ -109,15 +109,36 @@ impl LogServer {
         server
     }
 
-    pub async fn start_server(&self) {
-        LogServer::start().unwrap();
+    pub fn init_logger(&self) {
+        let settings = self.settings.as_ref().unwrap().clone();
+
+        let max_level = match settings.level {
+            Level::Error => LevelFilter::Error,
+            Level::Warn => LevelFilter::Warn,
+            Level::Info => LevelFilter::Info,
+            Level::Debug => LevelFilter::Debug,
+            Level::Trace => LevelFilter::Trace,
+        };
+
+        log::set_max_level(max_level);
+        log::set_boxed_logger(Box::new(self.clone())).unwrap();
+    }
+
+    pub fn start_server(&self) {
+        // println!("Starting server");
+        thread::spawn(move || {
+            LogServer::start().unwrap();
+        });
     }
 
     #[rocket::main]
     async fn start() -> Result<(), rocket::Error> {
+        // println!("Starting server...");
         let server = (*SERVER.lock().unwrap()).clone();
-
+        // println!("Server: {server:?}");
         let settings = server.settings.as_ref().unwrap().clone();
+
+        // println!("Starting server with settings {settings:?}");
 
         let config = rocket::Config {
             port: settings.port as u16,
@@ -145,9 +166,15 @@ impl log::Log for LogServer {
 
     fn log(&self, record: &log::Record) {
         if self.enabled(record.metadata()) {
+            //println!("Logging...");
+
             let level = record.level().to_string();
             let module = record.target().to_string();
             let message = record.args().to_string();
+
+            if module.contains("rocket") || module.contains("reqwest") {
+                return
+            }
 
             let item = LogItem {
                 level,
